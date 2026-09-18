@@ -4,7 +4,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Servislarni ro'yxatdan o'tkazish
 builder.Services.AddControllers();
-builder.Services.AddSingleton<ExcelDbService>();
+builder.Services.AddScoped<ExcelDbService>(); // Excel bilan xavfsiz ishlash uchun Scoped qilindi
 builder.Services.AddSingleton<AdminPanelService>(); // <--- Mana bu yerga qo'shildi
 
 var app = builder.Build();

@@ -27,6 +27,14 @@ namespace Web_sayt.Controllers
             return Ok(products);
         }
 
+        // --- YANGI: Jami foydalanuvchilar sonini qaytaruvchi metod ---
+        [HttpGet("users-count")]
+        public IActionResult GetUsersCount()
+        {
+            var users = _dbService.GetAllUsers();
+            return Ok(new { count = users.Count });
+        }
+
         [HttpPost("register")]
         public IActionResult Register([FromBody] User user)
         {
@@ -43,6 +51,7 @@ namespace Web_sayt.Controllers
 
             return Ok(new { message = "Muvaffaqiyatli ro'yxatdan o'tdingiz!" });
         }
+
         public class LoginRequest
         {
             public string Phone { get; set; }
@@ -61,7 +70,7 @@ namespace Web_sayt.Controllers
             return Ok(new { name = user.Name, phone = user.Phone });
         }
 
-        // --- BUYURTMA QABUL QILISH VA TELEGRAMGA YUBORISH METODI (Xatolikni tekshiruvchi) ---
+        // --- BUYURTMA QABUL QILISH VA TELEGRAMGA YUBORISH METODI ---
         [HttpPost("order")]
         public async Task<IActionResult> CreateOrder([FromBody] OrderModel orderDto)
         {
@@ -84,7 +93,6 @@ namespace Web_sayt.Controllers
                     var response = await httpClient.GetAsync(url);
                     string responseString = await response.Content.ReadAsStringAsync();
 
-                    // Agar Telegram xato bersa, o'sha xatoni to'g'ridan-to'g'ri qaytaradi
                     if (!response.IsSuccessStatusCode)
                     {
                         return StatusCode(500, new { message = "Telegram xatosi: " + responseString });
