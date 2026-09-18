@@ -43,6 +43,11 @@ namespace Web_sayt.Controllers
 
             return Ok(new { message = "Muvaffaqiyatli ro'yxatdan o'tdingiz!" });
         }
+        public class LoginRequest
+        {
+            public string Phone { get; set; }
+            public string Password { get; set; }
+        }
 
         [HttpPost("login")]
         public IActionResult Login([FromBody] LoginRequest login)
