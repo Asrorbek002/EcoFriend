@@ -12,12 +12,12 @@ namespace Web_sayt.Controllers
     public class HomeController : ControllerBase
     {
         private readonly ExcelDbService _dbService;
-        private const string TelegramBotToken = "8920465545:AAGroaLPm0CJfy1LacDjjrhlm5835Ow-LwY";
-        private const string TelegramChatId = "5399843682";
+        private readonly IConfiguration _config;
 
-        public HomeController(ExcelDbService dbService)
+        public HomeController(ExcelDbService dbService, IConfiguration config)
         {
             _dbService = dbService;
+            _config = config;
         }
 
         [HttpGet("products")]
@@ -27,7 +27,8 @@ namespace Web_sayt.Controllers
             return Ok(products);
         }
 
-        // --- YANGI: Jami foydalanuvchilar sonini qaytaruvchi metod ---
+        // Jami foydalanuvchilar sonini qaytaradi - bosh sahifadagi
+        // "Foydalanuvchilar" statistikasi shu yerdan olinadi (hammaga ko'rinadi)
         [HttpGet("users-count")]
         public IActionResult GetUsersCount()
         {
@@ -38,30 +39,33 @@ namespace Web_sayt.Controllers
         [HttpPost("register")]
         public IActionResult Register([FromBody] User user)
         {
-            if (string.IsNullOrEmpty(user.Name) || string.IsNullOrEmpty(user.Phone) || string.IsNullOrEmpty(user.Password))
+            if (user == null || string.IsNullOrWhiteSpace(user.Name) ||
+                string.IsNullOrWhiteSpace(user.Phone) || string.IsNullOrWhiteSpace(user.Password))
             {
-                return BadRequest("Barcha maydonlarni to'ldiring.");
+                return BadRequest(new { message = "Barcha maydonlarni to'ldiring." });
             }
 
-            bool success = _dbService.RegisterUser(user);
+            // Endi ExcelDbService lock bilan ishlaydi va aniq xato xabarini qaytaradi
+            var (success, error) = _dbService.RegisterUser(user);
             if (!success)
             {
-                return BadRequest("Ushbu telefon raqam allaqachon ro'yxatdan o'tgan!");
+                return BadRequest(new { message = error });
             }
 
             return Ok(new { message = "Muvaffaqiyatli ro'yxatdan o'tdingiz!" });
         }
 
-        public class LoginRequest
-        {
-            public string Phone { get; set; }
-            public string Password { get; set; }
-        }
-
+        // Endi Models.LoginRequest ishlatiladi - controller ichida
+        // takrorlangan class olib tashlandi
         [HttpPost("login")]
         public IActionResult Login([FromBody] LoginRequest login)
         {
-            var user = _dbService.ValidateUser(login.Phone, login.Password);
+            if (login == null || string.IsNullOrWhiteSpace(login.Username) || string.IsNullOrWhiteSpace(login.Password))
+            {
+                return BadRequest(new { message = "Telefon va parolni kiriting." });
+            }
+
+            var user = _dbService.ValidateUser(login.Username, login.Password);
             if (user == null)
             {
                 return NotFound(new { message = "Bunday foydalanuvchi topilmadi. Iltimos, ro'yxatdan o'ting!" });
@@ -79,6 +83,15 @@ namespace Web_sayt.Controllers
                 return BadRequest(new { message = "Buyurtma ma'lumotlari to'liq emas!" });
             }
 
+            // MUHIM: Token endi kodda emas, appsettings.json / environment variable'dan olinadi
+            var telegramBotToken = _config["Telegram:BotToken"];
+            var telegramChatId = _config["Telegram:ChatId"];
+
+            if (string.IsNullOrEmpty(telegramBotToken) || string.IsNullOrEmpty(telegramChatId))
+            {
+                return StatusCode(500, new { message = "Telegram sozlamalari topilmadi. appsettings.json yoki Render Environment Variables'ni tekshiring." });
+            }
+
             try
             {
                 string message = $"🛒 *Yangi buyurtma keldi!*\n\n" +
@@ -86,17 +99,15 @@ namespace Web_sayt.Controllers
                                  $"📞 *Telefon:* {orderDto.Phone}\n" +
                                  $"📦 *Mahsulot:* {orderDto.Product}";
 
-                string url = $"https://api.telegram.org/bot{TelegramBotToken}/sendMessage?chat_id={TelegramChatId}&text={Uri.EscapeDataString(message)}&parse_mode=Markdown";
+                string url = $"https://api.telegram.org/bot{telegramBotToken}/sendMessage?chat_id={telegramChatId}&text={Uri.EscapeDataString(message)}&parse_mode=Markdown";
 
-                using (var httpClient = new HttpClient())
+                using var httpClient = new HttpClient();
+                var response = await httpClient.GetAsync(url);
+                string responseString = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
                 {
-                    var response = await httpClient.GetAsync(url);
-                    string responseString = await response.Content.ReadAsStringAsync();
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        return StatusCode(500, new { message = "Telegram xatosi: " + responseString });
-                    }
+                    return StatusCode(500, new { message = "Telegram xatosi: " + responseString });
                 }
 
                 return Ok(new { message = "Buyurtmangiz muvaffaqiyatli qabul qilindi va operatorlarga yuborildi!" });
@@ -110,8 +121,15 @@ namespace Web_sayt.Controllers
 
     public class OrderModel
     {
-        public string Name { get; set; }
-        public string Phone { get; set; }
-        public string Product { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Phone { get; set; } = string.Empty;
+        public string Product { get; set; } = string.Empty;
+    }
+
+    public class LoginRequest
+    {
+        public string Username { get; set; }    // keep if other code uses it
+        public string Phone { get; set; }       // added to match controller
+        public string Password { get; set; }
     }
 }
